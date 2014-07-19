@@ -40,6 +40,7 @@ CodeMirror.defineMode("prolog", function(config, parserConfig) {
   var isSymbolChar = /[-#$&*+./:<=>?@\\^~]/;	/* Prolog glueing symbols chars */
   var isSoloChar   = /[[\]{}(),;|!]/;		/* Prolog solo chars */
   var isNeck       = /^(:-|-->)$/;
+  var isControlOp  = /^(,|;|->|\*->|\\+|\|)$/;
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 Default (SWI-)Prolog operator table.   To be used later to enhance the
@@ -192,10 +193,15 @@ offline experience.
     return null;
   }
 
+  /* Called on every non-comment token */
   function setArg1(state) {
     var nest = nesting(state);
-    if ( nest && nest.arg == 0 )		/* only functor */
-      nest.arg = 1;
+    if ( nest ) {
+      if ( nest.arg == 0 )		/* nested in a compound */
+	nest.arg = 1;
+      else if ( nest.type == "control" )
+	state.goalStart = false;
+    }
   }
 
   function setArgAlignment(state) {
@@ -210,19 +216,24 @@ offline experience.
 
   function nextArg(state) {
     var nest = nesting(state);
-    if ( nest && nest.arg ) {			/* only functor */
-      nest.arg++;
-//    console.log(nest);
-    }
+    if ( nest ) {
+      if ( nest.arg )			/* nested in a compound */
+	nest.arg++;
+      else if ( nest.type == "control" )
+	state.goalStart = true;		/* FIXME: also needed for ; and -> */
+    } else
+      state.goalStart = true;
   }
 
-						/* is a control structure */
-  function isControl(state) {
+  function isControl(state) {		/* our terms are goals */
     var nest = nesting(state);
-    if ( nest && nest.type == "control" ) {
-      return true;
-    }
-    return false;
+    if ( nest ) {
+      if ( nest.type == "control" ) {
+	return true;
+      }
+      return false;
+    } else
+      return state.inBody;
   }
 
   // Used as scratch variables to communicate multiple values without
@@ -306,6 +317,10 @@ offline experience.
 	  if ( stream.eol() )
 	    state.commaAtEOL = true;
 	  nextArg(state);
+          /*FALLTHROUGH*/
+	case ";":
+	  if ( isControl(state) )
+	    state.goalStart = true;
 	  break;
 	case "[":
 	  state.nesting.push({ type: "list",
@@ -338,6 +353,8 @@ offline experience.
 	      return ret("qq_close", "qq_close");
 	    }
 	  }
+	  if ( isControl(state) )
+	    state.goalStart = true;
 	  break;
       }
       return ret("solo", null, ch);
@@ -385,6 +402,9 @@ offline experience.
 	} return ret("fullstop", "fullstop", atom);
       } else if ( isNeck.test(atom) ) {
 	return ret("neck", "neck", atom);
+      } else if ( isControl(state) && isControlOp.test(atom) ) {
+	state.goalStart = true;
+	return ret("symbol", "operator", atom);
       } else
 	return ret("symbol", "operator", atom);
     }
@@ -467,7 +487,7 @@ offline experience.
     var start = cm.getCursor("start");
     var state = cm.getTokenAt(start, true);
 
-    if ( state.start == 0 && state.type == null )
+    if ( state.goalStart == true )
     { cm.replaceSelection("(   ", "end");
       return;
     }
@@ -512,6 +532,7 @@ offline experience.
       return {
         tokenize: plTokenBase,
 	inBody: false,
+	goalStart: false,
 	lastType: null,
 	nesting: new Array(),		/* ([{}]) nesting FIXME: copy this */
 	curTerm: null,			/* term index in metainfo */
@@ -544,8 +565,11 @@ offline experience.
 
       if ( type == "neck" ) {
 	state.inBody = true;
-      } else if ( type == "fullstop" )
+	state.goalStart = true;
+      } else if ( type == "fullstop" ) {
 	state.inBody = false;
+	state.goalStart = false;
+      }
 
       state.lastType = type;
 
