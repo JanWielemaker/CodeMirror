@@ -485,9 +485,9 @@ offline experience.
 
   CodeMirror.commands.prologStartIfThenElse = function(cm) {
     var start = cm.getCursor("start");
-    var state = cm.getTokenAt(start, true);
+    var token = cm.getTokenAt(start, true);
 
-    if ( state.goalStart == true )
+    if ( token.state.goalStart == true )
     { cm.replaceSelection("(   ", "end");
       return;
     }
