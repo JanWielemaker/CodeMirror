@@ -201,7 +201,8 @@ offline experience.
 	nest.arg = 1;
       else if ( nest.type == "control" )
 	state.goalStart = false;
-    }
+    } else
+      state.goalStart = false;
   }
 
   function setArgAlignment(state) {
