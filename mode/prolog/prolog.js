@@ -502,7 +502,8 @@ offline experience.
 
     if ( start.ch == state.end &&
 	 state.type == "operator" &&
-	 state.string == "-" )
+	 state.string == "-" &&
+	 !/\S/.test(state.string) )
     { cm.replaceSelection(">  ", "end");
       return;
     }
